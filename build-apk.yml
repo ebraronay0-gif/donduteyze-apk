@@ -1,0 +1,148 @@
+name: Android APK Oluştur
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Depoyu indir
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Node.js 20 kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+
+      - name: ZIP dosyasını bul
+        shell: bash
+        run: |
+          set -e
+
+          ZIP="donduteyze-apk-fixed.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "HATA: ZIP bulunamadı: $ZIP"
+            echo "Depodaki dosyalar:"
+            find . -maxdepth 2 -type f -print
+            exit 1
+          fi
+
+          echo "ZIP bulundu: $ZIP"
+
+      - name: ZIP dosyasını aç
+        shell: bash
+        run: |
+          set -e
+
+          rm -rf extracted
+          mkdir -p extracted
+
+          unzip -o "donduteyze-apk-fixed.zip" -d extracted
+
+          echo "ZIP açıldı."
+          find extracted -maxdepth 4 -type f | head -100
+
+      - name: Projeyi bul
+        shell: bash
+        run: |
+          set -e
+
+          PACKAGE=$(find "$GITHUB_WORKSPACE/extracted" \
+            -type f \
+            -name "package.json" \
+            -print -quit)
+
+          if [ -z "$PACKAGE" ]; then
+            echo "HATA: package.json bulunamadı!"
+            find "$GITHUB_WORKSPACE/extracted" -type f
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$PACKAGE")"
+
+          echo "Proje klasörü: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: NPM paketlerini kur
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          npm install --no-package-lock
+
+      - name: Web uygulamasını derle
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          npm run build
+
+      - name: Capacitor Android ekle
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+
+      - name: Capacitor senkronize et
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          npx cap sync android
+
+      - name: AdMob App ID ekle
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+
+          if [ ! -f "$MANIFEST" ]; then
+            echo "HATA: AndroidManifest.xml bulunamadı!"
+            exit 1
+          fi
+
+          if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" "$MANIFEST"; then
+            sed -i '/<application/i\
+    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" />' "$MANIFEST"
+          fi
+
+          echo "AdMob App ID kontrol edildi."
+
+      - name: APK oluştur
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR/android"
+
+          chmod +x gradlew
+
+          ./gradlew assembleDebug --no-daemon
+
+      - name: APK'yı yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: donduteyze-apk
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
