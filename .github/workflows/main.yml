@@ -6,15 +6,11 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: GitHub reposunu indir
         uses: actions/checkout@v4
 
@@ -28,8 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
-          cache-dependency-path: '**/package-lock.json'
 
       - name: Android SDK kur
         uses: android-actions/setup-android@v3
@@ -46,23 +40,19 @@ jobs:
             exit 1
           fi
 
-          echo "ZIP bulundu: $ZIP"
+          echo "Bulunan ZIP: $ZIP"
 
           mkdir -p extracted
           unzip -o "$ZIP" -d extracted
 
-          PACKAGE_JSON=$(find extracted \
-            -type f \
-            -name "package.json" \
-            -not -path "*/node_modules/*" \
-            -print -quit)
+          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/extracted" \
+            -type f -name "package.json" \
+            -print -quit | xargs -r dirname)
 
-          if [ -z "$PACKAGE_JSON" ]; then
+          if [ -z "$PROJECT_DIR" ]; then
             echo "HATA: package.json bulunamadı!"
             exit 1
           fi
-
-          PROJECT_DIR=$(dirname "$PACKAGE_JSON")
 
           echo "Proje klasörü: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
@@ -71,18 +61,16 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          npm install
 
       - name: Web uygulamasını oluştur
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           npm run build
@@ -91,6 +79,7 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           if [ ! -d "android" ]; then
@@ -101,6 +90,7 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           npx cap sync android
@@ -109,6 +99,7 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -118,66 +109,57 @@ jobs:
             exit 1
           fi
 
-          if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" "$MANIFEST"; then
-
-            python3 - "$MANIFEST" <<'PY'
+          python3 - "$MANIFEST" <<'PY'
           import sys
+          import re
 
           manifest = sys.argv[1]
 
           with open(manifest, "r", encoding="utf-8") as f:
               text = f.read()
 
-          marker = "<application"
+          app_id = "ca-app-pub-3940256099942544~3347511713"
 
-          start = text.find(marker)
+          if "com.google.android.gms.ads.APPLICATION_ID" in text:
+              print("AdMob App ID zaten mevcut.")
+              sys.exit(0)
 
-          if start == -1:
-              raise SystemExit("HATA: <application> bulunamadı!")
+          pattern = r'(<application\b[^>]*>)'
 
-          end = text.find(">", start)
-
-          if end == -1:
-              raise SystemExit("HATA: <application> etiketi bozuk!")
-
-          meta = '''
+          replacement = r'''\1
               <meta-data
                   android:name="com.google.android.gms.ads.APPLICATION_ID"
-                  android:value="ca-app-pub-3940256099942544~3347511713" />
-          '''
+                  android:value="''' + app_id + r'''"/>'''
 
-          text = text[:end + 1] + meta + text[end + 1:]
+          new_text, count = re.subn(
+              pattern,
+              replacement,
+              text,
+              count=1
+          )
+
+          if count == 0:
+              print("HATA: <application> etiketi bulunamadı!")
+              sys.exit(1)
 
           with open(manifest, "w", encoding="utf-8") as f:
-              f.write(text)
+              f.write(new_text)
 
-          print("AdMob test App ID eklendi.")
+          print("AdMob App ID başarıyla eklendi.")
           PY
-
-          fi
 
       - name: Android APK oluştur
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR/android"
 
           chmod +x gradlew
 
           ./gradlew assembleDebug --stacktrace
 
-      - name: APK dosyasını bul
-        shell: bash
-        run: |
-          set -e
-
-          echo "APK dosyaları:"
-          find "$PROJECT_DIR/android/app/build/outputs" \
-            -type f \
-            -name "*.apk" \
-            -print
-
-      - name: APK yükle
+      - name: APK dosyasını yükle
         uses: actions/upload-artifact@v4
         with:
           name: donduteyze-apk
