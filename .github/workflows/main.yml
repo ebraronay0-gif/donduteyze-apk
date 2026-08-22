@@ -1,0 +1,185 @@
+name: Android APK Oluştur
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: GitHub reposunu indir
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Node.js 20 kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+
+      - name: ZIP dosyasını bul ve aç
+        shell: bash
+        run: |
+          set -e
+
+          ZIP=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "HATA: ZIP dosyası bulunamadı!"
+            exit 1
+          fi
+
+          echo "ZIP bulundu: $ZIP"
+
+          mkdir -p extracted
+          unzip -o "$ZIP" -d extracted
+
+          PACKAGE_JSON=$(find extracted \
+            -type f \
+            -name "package.json" \
+            -not -path "*/node_modules/*" \
+            -print -quit)
+
+          if [ -z "$PACKAGE_JSON" ]; then
+            echo "HATA: package.json bulunamadı!"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PACKAGE_JSON")
+
+          echo "Proje klasörü: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: NPM paketlerini kur
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Web uygulamasını oluştur
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          npm run build
+
+      - name: Capacitor Android platformunu ekle
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+
+      - name: Capacitor senkronizasyonu
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          npx cap sync android
+
+      - name: AdMob App ID ekle
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+
+          if [ ! -f "$MANIFEST" ]; then
+            echo "HATA: AndroidManifest.xml bulunamadı!"
+            exit 1
+          fi
+
+          if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" "$MANIFEST"; then
+
+            python3 - "$MANIFEST" <<'PY'
+          import sys
+
+          manifest = sys.argv[1]
+
+          with open(manifest, "r", encoding="utf-8") as f:
+              text = f.read()
+
+          marker = "<application"
+
+          start = text.find(marker)
+
+          if start == -1:
+              raise SystemExit("HATA: <application> bulunamadı!")
+
+          end = text.find(">", start)
+
+          if end == -1:
+              raise SystemExit("HATA: <application> etiketi bozuk!")
+
+          meta = '''
+              <meta-data
+                  android:name="com.google.android.gms.ads.APPLICATION_ID"
+                  android:value="ca-app-pub-3940256099942544~3347511713" />
+          '''
+
+          text = text[:end + 1] + meta + text[end + 1:]
+
+          with open(manifest, "w", encoding="utf-8") as f:
+              f.write(text)
+
+          print("AdMob test App ID eklendi.")
+          PY
+
+          fi
+
+      - name: Android APK oluştur
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR/android"
+
+          chmod +x gradlew
+
+          ./gradlew assembleDebug --stacktrace
+
+      - name: APK dosyasını bul
+        shell: bash
+        run: |
+          set -e
+
+          echo "APK dosyaları:"
+          find "$PROJECT_DIR/android/app/build/outputs" \
+            -type f \
+            -name "*.apk" \
+            -print
+
+      - name: APK yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: donduteyze-apk
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
