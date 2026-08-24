@@ -9,9 +9,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Depoyu indir
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Java 17 kur
         uses: actions/setup-java@v5
@@ -23,9 +22,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '24'
+          package-manager-cache: false
 
       - name: Android SDK kur
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: ZIP dosyasını bul
         shell: bash
@@ -36,8 +36,7 @@ jobs:
 
           if [ ! -f "$ZIP" ]; then
             echo "HATA: ZIP bulunamadı: $ZIP"
-            echo "Depodaki dosyalar:"
-            find . -maxdepth 3 -type f -print
+            find . -maxdepth 2 -type f -print
             exit 1
           fi
 
@@ -55,8 +54,6 @@ jobs:
 
           echo "ZIP açıldı."
 
-          find extracted -type f | head -150
-
       - name: Projeyi bul
         shell: bash
         run: |
@@ -69,39 +66,32 @@ jobs:
 
           if [ -z "$PACKAGE" ]; then
             echo "HATA: package.json bulunamadı!"
-            find "$GITHUB_WORKSPACE/extracted" -type f
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$PACKAGE")"
 
           echo "Proje klasörü: $PROJECT_DIR"
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: NPM paketlerini kur
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
-
           npm install --no-package-lock
 
       - name: Web uygulamasını derle
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
-
           npm run build
 
       - name: Capacitor Android ekle
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
           if [ ! -d "android" ]; then
@@ -112,144 +102,30 @@ jobs:
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
-
           npx cap sync android
 
-      - name: DÖNDÜ TEYZE İKONUNU ZORLA UYGULA
+      - name: Döndü Teyze ikonunu zorla uygula
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
-          echo "======================================"
-          echo "DÖNDÜ TEYZE İKON DÜZELTMESİ BAŞLIYOR"
-          echo "======================================"
+          echo "=== İKON KONTROLÜ ==="
 
-          ICON=""
-
-          if [ -f "resources/launcher-icon-final.png" ]; then
-            ICON="resources/launcher-icon-final.png"
+          if [ -f "scripts/force-donduteyze-icon.sh" ]; then
+            chmod +x scripts/force-donduteyze-icon.sh
+            ./scripts/force-donduteyze-icon.sh
+          else
+            echo "force-donduteyze-icon.sh bulunamadı."
+            echo "ZIP içindeki ikon kaynakları aranıyor..."
+            find . -iname "*donduteyze*" -o -iname "*launcher*" | head -100
           fi
 
-          if [ -z "$ICON" ] && [ -f "resources/icon.png" ]; then
-            ICON="resources/icon.png"
-          fi
-
-          if [ -z "$ICON" ]; then
-            ICON=$(find . -type f \
-              \( -name "launcher-icon-final.png" -o -name "icon.png" \) \
-              -print -quit)
-          fi
-
-          if [ -z "$ICON" ]; then
-            echo "HATA: Döndü Teyze ikon dosyası bulunamadı!"
-            echo "Bulunan PNG dosyaları:"
-            find . -type f -name "*.png" -print
-            exit 1
-          fi
-
-          echo "Kullanılan ikon:"
-          echo "$ICON"
-
-          ANDROID="android/app/src/main"
-
-          mkdir -p "$ANDROID/res/mipmap-mdpi"
-          mkdir -p "$ANDROID/res/mipmap-hdpi"
-          mkdir -p "$ANDROID/res/mipmap-xhdpi"
-          mkdir -p "$ANDROID/res/mipmap-xxhdpi"
-          mkdir -p "$ANDROID/res/mipmap-xxxhdpi"
-
-          echo "Eski adaptive ikonlar temizleniyor..."
-
-          rm -rf "$ANDROID/res/mipmap-anydpi-v26"
-          rm -rf "$ANDROID/res/mipmap-anydpi"
-
-          echo "Eski launcher ikonları temizleniyor..."
-
-          rm -f "$ANDROID/res/mipmap-mdpi/ic_launcher.png"
-          rm -f "$ANDROID/res/mipmap-mdpi/ic_launcher_round.png"
-
-          rm -f "$ANDROID/res/mipmap-hdpi/ic_launcher.png"
-          rm -f "$ANDROID/res/mipmap-hdpi/ic_launcher_round.png"
-
-          rm -f "$ANDROID/res/mipmap-xhdpi/ic_launcher.png"
-          rm -f "$ANDROID/res/mipmap-xhdpi/ic_launcher_round.png"
-
-          rm -f "$ANDROID/res/mipmap-xxhdpi/ic_launcher.png"
-          rm -f "$ANDROID/res/mipmap-xxhdpi/ic_launcher_round.png"
-
-          rm -f "$ANDROID/res/mipmap-xxxhdpi/ic_launcher.png"
-          rm -f "$ANDROID/res/mipmap-xxxhdpi/ic_launcher_round.png"
-
-          echo "Yeni ikonlar oluşturuluyor..."
-
-          convert "$ICON" \
-            -resize 48x48 \
-            -background none \
-            -gravity center \
-            -extent 48x48 \
-            "$ANDROID/res/mipmap-mdpi/ic_launcher.png"
-
-          convert "$ICON" \
-            -resize 72x72 \
-            -background none \
-            -gravity center \
-            -extent 72x72 \
-            "$ANDROID/res/mipmap-hdpi/ic_launcher.png"
-
-          convert "$ICON" \
-            -resize 96x96 \
-            -background none \
-            -gravity center \
-            -extent 96x96 \
-            "$ANDROID/res/mipmap-xhdpi/ic_launcher.png"
-
-          convert "$ICON" \
-            -resize 144x144 \
-            -background none \
-            -gravity center \
-            -extent 144x144 \
-            "$ANDROID/res/mipmap-xxhdpi/ic_launcher.png"
-
-          convert "$ICON" \
-            -resize 192x192 \
-            -background none \
-            -gravity center \
-            -extent 192x192 \
-            "$ANDROID/res/mipmap-xxxhdpi/ic_launcher.png"
-
-          cp "$ANDROID/res/mipmap-mdpi/ic_launcher.png" \
-             "$ANDROID/res/mipmap-mdpi/ic_launcher_round.png"
-
-          cp "$ANDROID/res/mipmap-hdpi/ic_launcher.png" \
-             "$ANDROID/res/mipmap-hdpi/ic_launcher_round.png"
-
-          cp "$ANDROID/res/mipmap-xhdpi/ic_launcher.png" \
-             "$ANDROID/res/mipmap-xhdpi/ic_launcher_round.png"
-
-          cp "$ANDROID/res/mipmap-xxhdpi/ic_launcher.png" \
-             "$ANDROID/res/mipmap-xxhdpi/ic_launcher_round.png"
-
-          cp "$ANDROID/res/mipmap-xxxhdpi/ic_launcher.png" \
-             "$ANDROID/res/mipmap-xxxhdpi/ic_launcher_round.png"
-
-          echo "======================================"
-          echo "İKON DOSYALARI OLUŞTURULDU"
-          echo "======================================"
-
-          find "$ANDROID/res" \
-            -type f \
-            \( -name "ic_launcher.png" -o -name "ic_launcher_round.png" \) \
-            -print
-
-      - name: AndroidManifest ikonunu ayarla
+      - name: Manifest ikon kontrolü
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -259,24 +135,13 @@ jobs:
             exit 1
           fi
 
-          echo "Manifest ikonları düzenleniyor..."
-
-          sed -i 's/android:icon="@[^"]*"/android:icon="@mipmap\/ic_launcher"/g' "$MANIFEST"
-
-          sed -i 's/android:roundIcon="@[^"]*"/android:roundIcon="@mipmap\/ic_launcher_round"/g' "$MANIFEST"
-
-          if ! grep -q 'android:icon="@mipmap/ic_launcher"' "$MANIFEST"; then
-            sed -i 's/<application/<application android:icon="@mipmap\/ic_launcher" android:roundIcon="@mipmap\/ic_launcher_round"/' "$MANIFEST"
-          fi
-
-          echo "Manifest:"
+          echo "=== MANIFEST İKON AYARLARI ==="
           grep -n "android:icon\|android:roundIcon" "$MANIFEST" || true
 
-      - name: AdMob App ID ekle
+      - name: AdMob App ID kontrolü
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -286,61 +151,43 @@ jobs:
     <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" />' "$MANIFEST"
           fi
 
-          echo "AdMob App ID kontrol edildi."
-
-      - name: SON İKON KONTROLÜ
+      - name: Gradle temizle
         shell: bash
         run: |
           set -e
+          cd "$PROJECT_DIR/android"
 
-          cd "$PROJECT_DIR"
-
-          echo ""
-          echo "======================================"
-          echo "SON İKON KONTROLÜ"
-          echo "======================================"
-
-          echo ""
-          echo "Manifest:"
-          grep -n "android:icon\|android:roundIcon" \
-            android/app/src/main/AndroidManifest.xml || true
-
-          echo ""
-          echo "Launcher ikonları:"
-
-          find android/app/src/main/res \
-            -type f \
-            \( -name "ic_launcher.png" -o -name "ic_launcher_round.png" \) \
-            -print
-
-          echo ""
-          echo "Adaptive icon kontrolü:"
-
-          if [ -d "android/app/src/main/res/mipmap-anydpi-v26" ]; then
-            echo "UYARI: mipmap-anydpi-v26 hâlâ mevcut!"
-          else
-            echo "OK: Eski adaptive ikon klasörü yok."
-          fi
-
-          echo ""
-          echo "======================================"
-          echo "İKON KONTROLÜ TAMAMLANDI"
-          echo "======================================"
+          chmod +x gradlew
+          ./gradlew clean --no-daemon
 
       - name: APK oluştur
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR/android"
 
           chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
 
-          ./gradlew clean assembleDebug --no-daemon
+      - name: APK ikonunu doğrula
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+
+          echo "=== SON İKON DOSYALARI ==="
+          find android/app/src/main/res \
+            -type f \
+            \( -iname "*donduteyze*" -o -iname "*launcher*" \) \
+            -print
+
+          echo "=== MANIFEST ==="
+          grep -n "android:icon\|android:roundIcon" \
+            android/app/src/main/AndroidManifest.xml || true
 
       - name: APK'yı yükle
         uses: actions/upload-artifact@v4
         with:
-          name: donduteyze-icon-final
+          name: donduteyze-apk
           path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
