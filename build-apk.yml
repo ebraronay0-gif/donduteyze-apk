@@ -1,286 +1,70 @@
-name: Android APK Oluştur
-
-on:
-  push:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - name: Depoyu indir
-        uses: actions/checkout@v4
-
-      - name: Java 17 kur
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Node.js 20 kur
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Android SDK kur
-        uses: android-actions/setup-android@v3
-
-      - name: Gerekli araçları kur
+      - name: DÖNDÜ TEYZE İKONUNU ZORLA UYGULA
         shell: bash
         run: |
           set -e
-          sudo apt-get update
-          sudo apt-get install -y imagemagick unzip
+          cd "$PROJECT_DIR"
 
-      # =========================================================
-      # ZIP DOSYASINI BUL
-      # =========================================================
+          echo "===== DÖNDÜ TEYZE İKON DEĞİŞTİRME ====="
 
-      - name: Döndü Teyze ZIP kontrolü
-        shell: bash
-        run: |
-          set -e
+          ICON=""
 
-          ZIP="donduteyze-v51-icon-final.zip"
+          if [ -f "resources/launcher-icon-final.png" ]; then
+            ICON="resources/launcher-icon-final.png"
+          elif [ -f "resources/icon.png" ]; then
+            ICON="resources/icon.png"
+          else
+            ICON=$(find . -type f \
+              \( -iname "*launcher*icon*.png" -o -iname "icon.png" \) \
+              -print -quit)
+          fi
 
-          if [ ! -f "$ZIP" ]; then
-            echo "========================================"
-            echo "HATA: ZIP bulunamadı!"
-            echo "Aranan dosya: $ZIP"
-            echo "========================================"
-            echo ""
-            echo "GitHub deposundaki dosyalar:"
-            find . -maxdepth 3 -type f -print
+          if [ -z "$ICON" ]; then
+            echo "HATA: İKON BULUNAMADI"
             exit 1
           fi
 
-          echo "ZIP bulundu:"
-          ls -lh "$ZIP"
+          echo "KULLANILAN İKON:"
+          echo "$ICON"
 
-      # =========================================================
-      # ZIP'İ AÇ
-      # =========================================================
-
-      - name: ZIP dosyasını aç
-        shell: bash
-        run: |
-          set -e
-
-          rm -rf extracted
-          mkdir -p extracted
-
-          unzip -o "donduteyze-v51-icon-final.zip" -d extracted
-
-          echo ""
-          echo "ZIP başarıyla açıldı."
-          echo ""
-
-          find extracted -maxdepth 5 -type f | head -200
-
-      # =========================================================
-      # PROJEYİ OTOMATİK BUL
-      # =========================================================
-
-      - name: Döndü Teyze projesini bul
-        shell: bash
-        run: |
-          set -e
-
-          PACKAGE=$(find "$GITHUB_WORKSPACE/extracted" \
-            -type f \
-            -name "package.json" \
-            -print -quit)
-
-          if [ -z "$PACKAGE" ]; then
-            echo "HATA: package.json bulunamadı!"
-            echo ""
-            find "$GITHUB_WORKSPACE/extracted" -type f
-            exit 1
-          fi
-
-          PROJECT_DIR="$(dirname "$PACKAGE")"
-
-          echo "========================================"
-          echo "PROJE BULUNDU"
-          echo "========================================"
-          echo "$PROJECT_DIR"
-          echo "========================================"
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      # =========================================================
-      # YENİ DÖNDÜ TEYZE İKONUNU KONTROL ET
-      # =========================================================
-
-      - name: Yeni Döndü Teyze ikonunu kontrol et
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          echo "İkon dosyaları aranıyor..."
-
-          if [ ! -s "resources/launcher-icon-final.png" ]; then
-            echo "HATA: resources/launcher-icon-final.png bulunamadı!"
-            find resources -maxdepth 2 -type f 2>/dev/null || true
-            exit 1
-          fi
-
-          echo ""
-          echo "ANA İKON:"
-          identify "resources/launcher-icon-final.png"
-
-          if [ -f "resources/icon.png" ]; then
-            echo ""
-            echo "icon.png:"
-            identify "resources/icon.png"
-          fi
-
-          echo ""
-          echo "Yeni Döndü Teyze ikonu bulundu."
-
-      # =========================================================
-      # NPM
-      # =========================================================
-
-      - name: NPM paketlerini kur
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          npm install --no-audit --no-fund
-
-      # =========================================================
-      # WEB BUILD
-      # =========================================================
-
-      - name: Web uygulamasını derle
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          npm run build
-
-      # =========================================================
-      # CAPACITOR ANDROID
-      # =========================================================
-
-      - name: Capacitor Android oluştur
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          rm -rf android
-
-          npx cap add android
-
-      # =========================================================
-      # CAPACITOR SYNC
-      # =========================================================
-
-      - name: Capacitor senkronize et
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          npx cap sync android
-
-      # =========================================================
-      # ANDROID İKONUNU HAZIRLA
-      # =========================================================
-
-      - name: DÖNDÜ TEYZE İKONUNU ANDROID'E UYGULA
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd "$PROJECT_DIR"
-
-          ICON="resources/launcher-icon-final.png"
           RES="android/app/src/main/res"
 
-          echo "========================================"
-          echo "DÖNDÜ TEYZE İKONU UYGULANIYOR"
-          echo "========================================"
+          echo "TÜM ESKİ LAUNCHER İKONLARI SİLİNİYOR..."
 
-          if [ ! -s "$ICON" ]; then
-            echo "HATA: İkon bulunamadı:"
-            echo "$ICON"
-            exit 1
-          fi
+          find "$RES" -type f \
+            \( -name "ic_launcher.*" \
+            -o -name "ic_launcher_round.*" \
+            -o -name "ic_launcher_foreground.*" \
+            -o -name "ic_launcher_background.*" \) \
+            -delete
 
-          echo "Kullanılan ikon:"
-          identify "$ICON"
+          rm -rf "$RES/mipmap-anydpi-v26"
+          rm -rf "$RES/mipmap-anydpi"
 
-          # Eski launcher ikonlarını temizle
-          rm -rf "$RES"/mipmap-mdpi
-          rm -rf "$RES"/mipmap-hdpi
-          rm -rf "$RES"/mipmap-xhdpi
-          rm -rf "$RES"/mipmap-xxhdpi
-          rm -rf "$RES"/mipmap-xxxhdpi
-          rm -rf "$RES"/mipmap-anydpi-v26
+          echo "YENİ KLASÖRLER OLUŞTURULUYOR..."
 
-          mkdir -p \
-            "$RES/mipmap-mdpi" \
-            "$RES/mipmap-hdpi" \
-            "$RES/mipmap-xhdpi" \
-            "$RES/mipmap-xxhdpi" \
-            "$RES/mipmap-xxxhdpi" \
-            "$RES/mipmap-anydpi-v26" \
-            "$RES/drawable-nodpi" \
-            "$RES/values"
+          mkdir -p "$RES/mipmap-mdpi"
+          mkdir -p "$RES/mipmap-hdpi"
+          mkdir -p "$RES/mipmap-xhdpi"
+          mkdir -p "$RES/mipmap-xxhdpi"
+          mkdir -p "$RES/mipmap-xxxhdpi"
 
-          # -----------------------------------------------------
-          # ANDROID KLASİK LAUNCHER İKONLARI
-          # -----------------------------------------------------
+          echo "YENİ İKONLAR OLUŞTURULUYOR..."
 
-          convert "$ICON" \
-            -background none \
-            -gravity center \
-            -resize 48x48 \
-            -extent 48x48 \
+          convert "$ICON" -resize 48x48 \
             "$RES/mipmap-mdpi/ic_launcher.png"
 
-          convert "$ICON" \
-            -background none \
-            -gravity center \
-            -resize 72x72 \
-            -extent 72x72 \
+          convert "$ICON" -resize 72x72 \
             "$RES/mipmap-hdpi/ic_launcher.png"
 
-          convert "$ICON" \
-            -background none \
-            -gravity center \
-            -resize 96x96 \
-            -extent 96x96 \
+          convert "$ICON" -resize 96x96 \
             "$RES/mipmap-xhdpi/ic_launcher.png"
 
-          convert "$ICON" \
-            -background none \
-            -gravity center \
-            -resize 144x144 \
-            -extent 144x144 \
+          convert "$ICON" -resize 144x144 \
             "$RES/mipmap-xxhdpi/ic_launcher.png"
 
-          convert "$ICON" \
-            -background none \
-            -gravity center \
-            -resize 192x192 \
-            -extent 192x192 \
+          convert "$ICON" -resize 192x192 \
             "$RES/mipmap-xxxhdpi/ic_launcher.png"
 
-          # Yuvarlak ikonlar da aynı görsel
           cp "$RES/mipmap-mdpi/ic_launcher.png" \
              "$RES/mipmap-mdpi/ic_launcher_round.png"
 
@@ -296,22 +80,9 @@ jobs:
           cp "$RES/mipmap-xxxhdpi/ic_launcher.png" \
              "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
 
-          # -----------------------------------------------------
-          # ADAPTIVE ICON ÖN PLAN
-          # -----------------------------------------------------
+          echo "===== İKON KONTROL ====="
 
-          convert "$ICON" \
-            -background none \
-            -gravity center \
-            -resize 432x432 \
-            -extent 432x432 \
-            "$RES/drawable-nodpi/donduteyze_foreground.png"
-
-          # -----------------------------------------------------
-          # ADAPTIVE ICON ARKA PLAN
-          # -----------------------------------------------------
-
-          cat > "$RES/values/donduteyze_colors.xml" <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <color name="donduteyze_icon_background">#160
+          find "$RES" -type f \
+            \( -name "ic_launcher.png" \
+            -o -name "ic_launcher_round.png" \) \
+            -print
