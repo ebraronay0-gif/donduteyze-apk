@@ -1,179 +1,116 @@
-name: Android APK Oluştur
+#!/bin/bash
+set -e
 
-on:
-  push:
-  workflow_dispatch:
+echo "========================================"
+echo "   DÖNDÜ TEYZE APK BUILD"
+echo "========================================"
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+# Proje kök dizini
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
 
-    steps:
+echo "📁 Proje: $ROOT_DIR"
 
-      # ============================================================
-      # 1 - REPoyu indir
-      # ============================================================
-      - name: Depoyu indir
-        uses: actions/checkout@v5
+# --------------------------------------------------
+# 1. Capacitor Android projesini senkronize et
+# --------------------------------------------------
 
-      # ============================================================
-      # 2 - JAVA 17
-      # ============================================================
-      - name: Java 17 kur
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+echo "🔄 Capacitor Android senkronizasyonu..."
 
-      # ============================================================
-      # 3 - NODE 24
-      # ============================================================
-      - name: Node.js 24 kur
-        uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-          cache: npm
+npx cap sync android
 
-      # ============================================================
-      # 4 - ANDROID SDK
-      # ============================================================
-      - name: Android SDK kur
-        uses: android-actions/setup-android@v3
+# --------------------------------------------------
+# 2. Döndü Teyze ikonunu kontrol et
+# --------------------------------------------------
 
-      # ============================================================
-      # 5 - GEREKLİ ARAÇLAR
-      # ============================================================
-      - name: Görsel araçlarını kur
-        shell: bash
-        run: |
-          set -e
+ICON_SOURCE="$ROOT_DIR/resources/launcher-icon-final.png"
 
-          sudo apt-get update
-          sudo apt-get install -y imagemagick unzip
+if [ ! -f "$ICON_SOURCE" ]; then
+    echo "❌ HATA: Döndü Teyze ikon dosyası bulunamadı:"
+    echo "$ICON_SOURCE"
+    exit 1
+fi
 
-          echo "Gerekli araçlar hazır."
+echo "✅ Döndü Teyze ikonu bulundu."
 
-      # ============================================================
-      # 6 - ZIP DOSYASINI BUL
-      # ============================================================
-      - name: ZIP dosyasını bul
-        shell: bash
-        run: |
-          set -e
+# --------------------------------------------------
+# 3. Android mipmap klasörlerini oluştur
+# --------------------------------------------------
 
-          ZIP="donduteyze-apk-fixed.zip"
+RES_DIR="$ROOT_DIR/android/app/src/main/res"
 
-          if [ ! -f "$ZIP" ]; then
-            echo "HATA: $ZIP bulunamadı!"
-            echo ""
-            echo "Depodaki ZIP dosyaları:"
-            find . -maxdepth 3 -type f \
-              -name "*.zip" -o -name "*.ZIP" \
-              -print
-            exit 1
-          fi
+mkdir -p "$RES_DIR/mipmap-mdpi"
+mkdir -p "$RES_DIR/mipmap-hdpi"
+mkdir -p "$RES_DIR/mipmap-xhdpi"
+mkdir -p "$RES_DIR/mipmap-xxhdpi"
+mkdir -p "$RES_DIR/mipmap-xxxhdpi"
 
-          echo "ZIP bulundu: $ZIP"
+# --------------------------------------------------
+# 4. Capacitor'un eski launcher ikonlarını temizle
+# --------------------------------------------------
 
-      # ============================================================
-      # 7 - ZIP'İ AÇ
-      # ============================================================
-      - name: ZIP dosyasını aç
-        shell: bash
-        run: |
-          set -e
+echo "🧹 Eski launcher ikonları temizleniyor..."
 
-          rm -rf extracted
-          mkdir -p extracted
+find "$RES_DIR" -type f \
+    -name "ic_launcher.png" -o \
+    -name "ic_launcher_round.png" -o \
+    -name "ic_launcher_foreground.png" -o \
+    -name "ic_launcher_background.png" \
+ -delete
 
-          unzip -o "donduteyze-apk-fixed.zip" -d extracted
+# --------------------------------------------------
+# 5. Döndü Teyze ikonunu Android'e kopyala
+# --------------------------------------------------
 
-          echo ""
-          echo "ZIP başarıyla açıldı."
-          echo ""
-          echo "İlk dosyalar:"
-          find extracted -maxdepth 5 -type f | head -150
+echo "🖼️ Döndü Teyze ikonu Android'e aktarılıyor..."
 
-      # ============================================================
-      # 8 - PROJEYİ BUL
-      # ============================================================
-      - name: Projeyi bul
-        shell: bash
-        run: |
-          set -e
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-mdpi/ic_donduteyze.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-hdpi/ic_donduteyze.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xhdpi/ic_donduteyze.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxhdpi/ic_donduteyze.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxxhdpi/ic_donduteyze.png"
 
-          PACKAGE=$(find "$GITHUB_WORKSPACE/extracted" \
-            -type f \
-            -name "package.json" \
-            -print -quit)
+# Yuvarlak ikon için de aynı Döndü Teyze ikonunu kullan
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-mdpi/ic_donduteyze_round.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-hdpi/ic_donduteyze_round.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xhdpi/ic_donduteyze_round.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxhdpi/ic_donduteyze_round.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxxhdpi/ic_donduteyze_round.png"
 
-          if [ -z "$PACKAGE" ]; then
-            echo "HATA: package.json bulunamadı!"
-            find "$GITHUB_WORKSPACE/extracted" -type f | head -300
-            exit 1
-          fi
+# --------------------------------------------------
+# 6. Android Manifest'i Döndü Teyze ikonuna bağla
+# --------------------------------------------------
 
-          PROJECT_DIR="$(dirname "$PACKAGE")"
+MANIFEST="$ROOT_DIR/android/app/src/main/AndroidManifest.xml"
 
-          echo "======================================"
-          echo "PROJE:"
-          echo "$PROJECT_DIR"
-          echo "======================================"
+if [ ! -f "$MANIFEST" ]; then
+    echo "❌ AndroidManifest.xml bulunamadı!"
+    exit 1
+fi
 
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+echo "🔧 Android Manifest ikon ayarı yapılıyor..."
 
-      # ============================================================
-      # 9 - NPM
-      # ============================================================
-      - name: NPM paketlerini kur
-        shell: bash
-        run: |
-          set -e
+python3 - "$MANIFEST" <<'PY'
+import sys
+import re
 
-          cd "$PROJECT_DIR"
+manifest = sys.argv[1]
 
-          npm install --no-package-lock
+with open(manifest, "r", encoding="utf-8") as f:
+    text = f.read()
 
-      # ============================================================
-      # 10 - WEB UYGULAMASINI DERLE
-      # ============================================================
-      - name: Web uygulamasını derle
-        shell: bash
-        run: |
-          set -e
+text = re.sub(
+    r'android:icon="@mipmap/[^"]+"',
+    'android:icon="@mipmap/ic_donduteyze"',
+    text
+)
 
-          cd "$PROJECT_DIR"
+text = re.sub(
+    r'android:roundIcon="@mipmap/[^"]+"',
+    'android:roundIcon="@mipmap/ic_donduteyze_round"',
+    text
+)
 
-          npm run build
-
-      # ============================================================
-      # 11 - CAPACITOR ANDROID
-      # ============================================================
-      - name: Capacitor Android ekle
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          if [ ! -d "android" ]; then
-            echo "Android klasörü yok. Oluşturuluyor..."
-            npx cap add android
-          else
-            echo "Android klasörü zaten mevcut."
-          fi
-
-      # ============================================================
-      # 12 - CAPACITOR SYNC
-      # ============================================================
-      - name: Capacitor senkronize et
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          npx cap sync android
-
-      # ============================================================
-      #
+with open(manifest, "w", encoding="utf-8") as f:
+    f.write(text)
+PY
