@@ -30,19 +30,20 @@ jobs:
           npx cap add android || true
           npx cap sync android
 
-      - name: KÖKTEN ÇÖZÜM - Tüm Capacitor İkonlarını Yok Et ve Döndü Teyze'yi Bas
+      - name: NÜKLEER TEMİZLİK - Tüm Adaptif İkonlar ve Eski Dosyalar Yok Ediliyor
         run: |
           RES_DIR="android/app/src/main/res"
           ICON_SOURCE="resources/launcher-icon-final.png"
           
-          echo "🔥 Eski tüm ikon dosyaları kökten siliniyor..."
+          echo "🔥 Adaptif ikon klasörleri ve xml tanımları tamamen kazınıyor..."
+          rm -rf $RES_DIR/mipmap-anydpi-v26
           find "$RES_DIR" -type f -name "*ic_launcher*" -delete
           find "$RES_DIR" -type f -name "*icon*" -delete
           
-          echo "🖼️ Klasörler yeniden oluşturuluyor..."
+          echo "🖼️ Klasörler sıfırdan oluşturuluyor..."
           mkdir -p $RES_DIR/mipmap-mdpi $RES_DIR/mipmap-hdpi $RES_DIR/mipmap-xhdpi $RES_DIR/mipmap-xxhdpi $RES_DIR/mipmap-xxxhdpi
           
-          echo "🎯 Döndü Teyze ikonları her boyuta tek tek yerleştiriliyor..."
+          echo "🎯 Döndü Teyze ikonları doğrudan mipmap klasörlerine gömülüyor..."
           
           # Kare ikonlar
           cp $ICON_SOURCE $RES_DIR/mipmap-mdpi/ic_launcher.png
@@ -57,10 +58,6 @@ jobs:
           cp $ICON_SOURCE $RES_DIR/mipmap-xhdpi/ic_launcher_round.png
           cp $ICON_SOURCE $RES_DIR/mipmap-xxhdpi/ic_launcher_round.png
           cp $ICON_SOURCE $RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png
-          
-          # Ek olarak mipmap içindeki olası xml/webp arka planlarını da temizleyip düz PNG yapıyoruz
-          rm -f $RES_DIR/mipmap-*/ic_launcher_background.xml
-          rm -f $RES_DIR/mipmap-*/ic_launcher_foreground.xml
 
       - name: Android Manifest İkon Ayarını Sabitle
         run: |
