@@ -9,24 +9,53 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      # ============================================================
+      # 1 - REPoyu indir
+      # ============================================================
       - name: Depoyu indir
         uses: actions/checkout@v5
 
+      # ============================================================
+      # 2 - JAVA 17
+      # ============================================================
       - name: Java 17 kur
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
+      # ============================================================
+      # 3 - NODE 24
+      # ============================================================
       - name: Node.js 24 kur
         uses: actions/setup-node@v5
         with:
           node-version: '24'
-          package-manager-cache: false
+          cache: npm
 
+      # ============================================================
+      # 4 - ANDROID SDK
+      # ============================================================
       - name: Android SDK kur
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@v3
 
+      # ============================================================
+      # 5 - GEREKLİ ARAÇLAR
+      # ============================================================
+      - name: Görsel araçlarını kur
+        shell: bash
+        run: |
+          set -e
+
+          sudo apt-get update
+          sudo apt-get install -y imagemagick unzip
+
+          echo "Gerekli araçlar hazır."
+
+      # ============================================================
+      # 6 - ZIP DOSYASINI BUL
+      # ============================================================
       - name: ZIP dosyasını bul
         shell: bash
         run: |
@@ -35,13 +64,20 @@ jobs:
           ZIP="donduteyze-apk-fixed.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "HATA: ZIP bulunamadı: $ZIP"
-            find . -maxdepth 2 -type f -print
+            echo "HATA: $ZIP bulunamadı!"
+            echo ""
+            echo "Depodaki ZIP dosyaları:"
+            find . -maxdepth 3 -type f \
+              -name "*.zip" -o -name "*.ZIP" \
+              -print
             exit 1
           fi
 
           echo "ZIP bulundu: $ZIP"
 
+      # ============================================================
+      # 7 - ZIP'İ AÇ
+      # ============================================================
       - name: ZIP dosyasını aç
         shell: bash
         run: |
@@ -52,8 +88,15 @@ jobs:
 
           unzip -o "donduteyze-apk-fixed.zip" -d extracted
 
-          echo "ZIP açıldı."
+          echo ""
+          echo "ZIP başarıyla açıldı."
+          echo ""
+          echo "İlk dosyalar:"
+          find extracted -maxdepth 5 -type f | head -150
 
+      # ============================================================
+      # 8 - PROJEYİ BUL
+      # ============================================================
       - name: Projeyi bul
         shell: bash
         run: |
@@ -66,128 +109,71 @@ jobs:
 
           if [ -z "$PACKAGE" ]; then
             echo "HATA: package.json bulunamadı!"
+            find "$GITHUB_WORKSPACE/extracted" -type f | head -300
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$PACKAGE")"
 
-          echo "Proje klasörü: $PROJECT_DIR"
+          echo "======================================"
+          echo "PROJE:"
+          echo "$PROJECT_DIR"
+          echo "======================================"
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
+      # ============================================================
+      # 9 - NPM
+      # ============================================================
       - name: NPM paketlerini kur
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
+
           npm install --no-package-lock
 
+      # ============================================================
+      # 10 - WEB UYGULAMASINI DERLE
+      # ============================================================
       - name: Web uygulamasını derle
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
+
           npm run build
 
+      # ============================================================
+      # 11 - CAPACITOR ANDROID
+      # ============================================================
       - name: Capacitor Android ekle
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           if [ ! -d "android" ]; then
+            echo "Android klasörü yok. Oluşturuluyor..."
             npx cap add android
+          else
+            echo "Android klasörü zaten mevcut."
           fi
 
+      # ============================================================
+      # 12 - CAPACITOR SYNC
+      # ============================================================
       - name: Capacitor senkronize et
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
+
           npx cap sync android
 
-      - name: Döndü Teyze ikonunu zorla uygula
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR"
-
-          echo "=== İKON KONTROLÜ ==="
-
-          if [ -f "scripts/force-donduteyze-icon.sh" ]; then
-            chmod +x scripts/force-donduteyze-icon.sh
-            ./scripts/force-donduteyze-icon.sh
-          else
-            echo "force-donduteyze-icon.sh bulunamadı."
-            echo "ZIP içindeki ikon kaynakları aranıyor..."
-            find . -iname "*donduteyze*" -o -iname "*launcher*" | head -100
-          fi
-
-      - name: Manifest ikon kontrolü
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR"
-
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-
-          if [ ! -f "$MANIFEST" ]; then
-            echo "HATA: AndroidManifest.xml bulunamadı!"
-            exit 1
-          fi
-
-          echo "=== MANIFEST İKON AYARLARI ==="
-          grep -n "android:icon\|android:roundIcon" "$MANIFEST" || true
-
-      - name: AdMob App ID kontrolü
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR"
-
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-
-          if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" "$MANIFEST"; then
-            sed -i '/<application/i\
-    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" />' "$MANIFEST"
-          fi
-
-      - name: Gradle temizle
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR/android"
-
-          chmod +x gradlew
-          ./gradlew clean --no-daemon
-
-      - name: APK oluştur
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR/android"
-
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      - name: APK ikonunu doğrula
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR"
-
-          echo "=== SON İKON DOSYALARI ==="
-          find android/app/src/main/res \
-            -type f \
-            \( -iname "*donduteyze*" -o -iname "*launcher*" \) \
-            -print
-
-          echo "=== MANIFEST ==="
-          grep -n "android:icon\|android:roundIcon" \
-            android/app/src/main/AndroidManifest.xml || true
-
-      - name: APK'yı yükle
-        uses: actions/upload-artifact@v4
-        with:
-          name: donduteyze-apk
-          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+      # ============================================================
+      #
