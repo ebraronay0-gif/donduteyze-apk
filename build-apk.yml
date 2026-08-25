@@ -2,7 +2,7 @@
 set -e
 
 echo "========================================"
-echo "   DÖNDÜ TEYZE APK BUILD"
+echo "   DÖNDÜ TEYZE APK BUILD (GÜNCELLENDİ)"
 echo "========================================"
 
 # Proje kök dizini
@@ -51,34 +51,35 @@ mkdir -p "$RES_DIR/mipmap-xxxhdpi"
 
 echo "🧹 Eski launcher ikonları temizleniyor..."
 
-find "$RES_DIR" -type f \
+find "$RES_DIR" -type f \( \
     -name "ic_launcher.png" -o \
     -name "ic_launcher_round.png" -o \
     -name "ic_launcher_foreground.png" -o \
     -name "ic_launcher_background.png" \
- -delete
+\) -delete
 
 # --------------------------------------------------
-# 5. Döndü Teyze ikonunu Android'e kopyala
+# 5. İkonu Android standart isimleriyle kopyala
 # --------------------------------------------------
 
 echo "🖼️ Döndü Teyze ikonu Android'e aktarılıyor..."
 
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-mdpi/ic_donduteyze.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-hdpi/ic_donduteyze.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xhdpi/ic_donduteyze.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxhdpi/ic_donduteyze.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxxhdpi/ic_donduteyze.png"
+# Normal kare ikonlar
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-mdpi/ic_launcher.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-hdpi/ic_launcher.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xhdpi/ic_launcher.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxhdpi/ic_launcher.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxxhdpi/ic_launcher.png"
 
-# Yuvarlak ikon için de aynı Döndü Teyze ikonunu kullan
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-mdpi/ic_donduteyze_round.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-hdpi/ic_donduteyze_round.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xhdpi/ic_donduteyze_round.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxhdpi/ic_donduteyze_round.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxxhdpi/ic_donduteyze_round.png"
+# Yuvarlak ikonlar
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-mdpi/ic_launcher_round.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-hdpi/ic_launcher_round.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xhdpi/ic_launcher_round.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png"
+cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png"
 
 # --------------------------------------------------
-# 6. Android Manifest'i Döndü Teyze ikonuna bağla
+# 6. Android Manifest'i standart ikona bağla
 # --------------------------------------------------
 
 MANIFEST="$ROOT_DIR/android/app/src/main/AndroidManifest.xml"
@@ -101,16 +102,18 @@ with open(manifest, "r", encoding="utf-8") as f:
 
 text = re.sub(
     r'android:icon="@mipmap/[^"]+"',
-    'android:icon="@mipmap/ic_donduteyze"',
+    'android:icon="@mipmap/ic_launcher"',
     text
 )
 
 text = re.sub(
     r'android:roundIcon="@mipmap/[^"]+"',
-    'android:roundIcon="@mipmap/ic_donduteyze_round"',
+    'android:roundIcon="@mipmap/ic_launcher_round"',
     text
 )
 
 with open(manifest, "w", encoding="utf-8") as f:
     f.write(text)
 PY
+
+echo "🎉 İşlem tamam! İkonlar başarıyla güncellendi."
