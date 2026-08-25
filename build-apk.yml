@@ -1,88 +1,179 @@
-      - name: DÖNDÜ TEYZE İKONUNU ZORLA UYGULA
+name: Android APK Oluştur
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ============================================================
+      # 1 - REPoyu indir
+      # ============================================================
+      - name: Depoyu indir
+        uses: actions/checkout@v5
+
+      # ============================================================
+      # 2 - JAVA 17
+      # ============================================================
+      - name: Java 17 kur
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ============================================================
+      # 3 - NODE 24
+      # ============================================================
+      - name: Node.js 24 kur
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+
+      # ============================================================
+      # 4 - ANDROID SDK
+      # ============================================================
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+
+      # ============================================================
+      # 5 - GEREKLİ ARAÇLAR
+      # ============================================================
+      - name: Görsel araçlarını kur
         shell: bash
         run: |
           set -e
-          cd "$PROJECT_DIR"
 
-          echo "===== DÖNDÜ TEYZE İKON DEĞİŞTİRME ====="
+          sudo apt-get update
+          sudo apt-get install -y imagemagick unzip
 
-          ICON=""
+          echo "Gerekli araçlar hazır."
 
-          if [ -f "resources/launcher-icon-final.png" ]; then
-            ICON="resources/launcher-icon-final.png"
-          elif [ -f "resources/icon.png" ]; then
-            ICON="resources/icon.png"
-          else
-            ICON=$(find . -type f \
-              \( -iname "*launcher*icon*.png" -o -iname "icon.png" \) \
-              -print -quit)
-          fi
+      # ============================================================
+      # 6 - ZIP DOSYASINI BUL
+      # ============================================================
+      - name: ZIP dosyasını bul
+        shell: bash
+        run: |
+          set -e
 
-          if [ -z "$ICON" ]; then
-            echo "HATA: İKON BULUNAMADI"
+          ZIP="donduteyze-apk-fixed.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "HATA: $ZIP bulunamadı!"
+            echo ""
+            echo "Depodaki ZIP dosyaları:"
+            find . -maxdepth 3 -type f \
+              -name "*.zip" -o -name "*.ZIP" \
+              -print
             exit 1
           fi
 
-          echo "KULLANILAN İKON:"
-          echo "$ICON"
+          echo "ZIP bulundu: $ZIP"
 
-          RES="android/app/src/main/res"
+      # ============================================================
+      # 7 - ZIP'İ AÇ
+      # ============================================================
+      - name: ZIP dosyasını aç
+        shell: bash
+        run: |
+          set -e
 
-          echo "TÜM ESKİ LAUNCHER İKONLARI SİLİNİYOR..."
+          rm -rf extracted
+          mkdir -p extracted
 
-          find "$RES" -type f \
-            \( -name "ic_launcher.*" \
-            -o -name "ic_launcher_round.*" \
-            -o -name "ic_launcher_foreground.*" \
-            -o -name "ic_launcher_background.*" \) \
-            -delete
+          unzip -o "donduteyze-apk-fixed.zip" -d extracted
 
-          rm -rf "$RES/mipmap-anydpi-v26"
-          rm -rf "$RES/mipmap-anydpi"
+          echo ""
+          echo "ZIP başarıyla açıldı."
+          echo ""
+          echo "İlk dosyalar:"
+          find extracted -maxdepth 5 -type f | head -150
 
-          echo "YENİ KLASÖRLER OLUŞTURULUYOR..."
+      # ============================================================
+      # 8 - PROJEYİ BUL
+      # ============================================================
+      - name: Projeyi bul
+        shell: bash
+        run: |
+          set -e
 
-          mkdir -p "$RES/mipmap-mdpi"
-          mkdir -p "$RES/mipmap-hdpi"
-          mkdir -p "$RES/mipmap-xhdpi"
-          mkdir -p "$RES/mipmap-xxhdpi"
-          mkdir -p "$RES/mipmap-xxxhdpi"
+          PACKAGE=$(find "$GITHUB_WORKSPACE/extracted" \
+            -type f \
+            -name "package.json" \
+            -print -quit)
 
-          echo "YENİ İKONLAR OLUŞTURULUYOR..."
+          if [ -z "$PACKAGE" ]; then
+            echo "HATA: package.json bulunamadı!"
+            find "$GITHUB_WORKSPACE/extracted" -type f | head -300
+            exit 1
+          fi
 
-          convert "$ICON" -resize 48x48 \
-            "$RES/mipmap-mdpi/ic_launcher.png"
+          PROJECT_DIR="$(dirname "$PACKAGE")"
 
-          convert "$ICON" -resize 72x72 \
-            "$RES/mipmap-hdpi/ic_launcher.png"
+          echo "======================================"
+          echo "PROJE:"
+          echo "$PROJECT_DIR"
+          echo "======================================"
 
-          convert "$ICON" -resize 96x96 \
-            "$RES/mipmap-xhdpi/ic_launcher.png"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          convert "$ICON" -resize 144x144 \
-            "$RES/mipmap-xxhdpi/ic_launcher.png"
+      # ============================================================
+      # 9 - NPM
+      # ============================================================
+      - name: NPM paketlerini kur
+        shell: bash
+        run: |
+          set -e
 
-          convert "$ICON" -resize 192x192 \
-            "$RES/mipmap-xxxhdpi/ic_launcher.png"
+          cd "$PROJECT_DIR"
 
-          cp "$RES/mipmap-mdpi/ic_launcher.png" \
-             "$RES/mipmap-mdpi/ic_launcher_round.png"
+          npm install --no-package-lock
 
-          cp "$RES/mipmap-hdpi/ic_launcher.png" \
-             "$RES/mipmap-hdpi/ic_launcher_round.png"
+      # ============================================================
+      # 10 - WEB UYGULAMASINI DERLE
+      # ============================================================
+      - name: Web uygulamasını derle
+        shell: bash
+        run: |
+          set -e
 
-          cp "$RES/mipmap-xhdpi/ic_launcher.png" \
-             "$RES/mipmap-xhdpi/ic_launcher_round.png"
+          cd "$PROJECT_DIR"
 
-          cp "$RES/mipmap-xxhdpi/ic_launcher.png" \
-             "$RES/mipmap-xxhdpi/ic_launcher_round.png"
+          npm run build
 
-          cp "$RES/mipmap-xxxhdpi/ic_launcher.png" \
-             "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
+      # ============================================================
+      # 11 - CAPACITOR ANDROID
+      # ============================================================
+      - name: Capacitor Android ekle
+        shell: bash
+        run: |
+          set -e
 
-          echo "===== İKON KONTROL ====="
+          cd "$PROJECT_DIR"
 
-          find "$RES" -type f \
-            \( -name "ic_launcher.png" \
-            -o -name "ic_launcher_round.png" \) \
-            -print
+          if [ ! -d "android" ]; then
+            echo "Android klasörü yok. Oluşturuluyor..."
+            npx cap add android
+          else
+            echo "Android klasörü zaten mevcut."
+          fi
+
+      # ============================================================
+      # 12 - CAPACITOR SYNC
+      # ============================================================
+      - name: Capacitor senkronize et
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          npx cap sync android
+
+      # ============================================================
+      #
