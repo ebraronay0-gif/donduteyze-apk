@@ -1,119 +1,82 @@
-#!/bin/bash
-set -e
+name: Build APK
 
-echo "========================================"
-echo "   DÖNDÜ TEYZE APK BUILD (GÜNCELLENDİ)"
-echo "========================================"
+on:
+  push:
+    branches: [ "ana", "master", "main" ]
+  workflow_dispatch:
 
-# Proje kök dizini
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT_DIR"
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-echo "📁 Proje: $ROOT_DIR"
+    steps:
+      - name: Depoyu Kopyala (Checkout)
+        uses: actions/checkout@v4
 
-# --------------------------------------------------
-# 1. Capacitor Android projesini senkronize et
-# --------------------------------------------------
+      - name: Node.js Kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
 
-echo "🔄 Capacitor Android senkronizasyonu..."
+      - name: Bağımlılıkları Yükle
+        run: npm install
 
-npx cap sync android
+      - name: Web Projesini Derle (Build)
+        run: npm run build
 
-# --------------------------------------------------
-# 2. Döndü Teyze ikonunu kontrol et
-# --------------------------------------------------
+      - name: Capacitor Android Ekle ve Senkronize Et
+        run: |
+          npx cap add android || true
+          npx cap sync android
 
-ICON_SOURCE="$ROOT_DIR/resources/launcher-icon-final.png"
+      - name: Döndü Teyze İkonunu En Son Vuruş Olarak Enjekte Et
+        run: |
+          RES_DIR="android/app/src/main/res"
+          ICON_SOURCE="resources/launcher-icon-final.png"
+          
+          echo "🖼️ İkon klasörleri oluşturuluyor ve Döndü Teyze işleniyor..."
+          mkdir -p $RES_DIR/mipmap-mdpi $RES_DIR/mipmap-hdpi $RES_DIR/mipmap-xhdpi $RES_DIR/mipmap-xxhdpi $RES_DIR/mipmap-xxxhdpi
+          
+          # Kare ikonlar
+          cp $ICON_SOURCE $RES_DIR/mipmap-mdpi/ic_launcher.png
+          cp $ICON_SOURCE $RES_DIR/mipmap-hdpi/ic_launcher.png
+          cp $ICON_SOURCE $RES_DIR/mipmap-xhdpi/ic_launcher.png
+          cp $ICON_SOURCE $RES_DIR/mipmap-xxhdpi/ic_launcher.png
+          cp $ICON_SOURCE $RES_DIR/mipmap-xxxhdpi/ic_launcher.png
+          
+          # Yuvarlak ikonlar
+          cp $ICON_SOURCE $RES_DIR/mipmap-mdpi/ic_launcher_round.png
+          cp $ICON_SOURCE $RES_DIR/mipmap-hdpi/ic_launcher_round.png
+          cp $ICON_SOURCE $RES_DIR/mipmap-xhdpi/ic_launcher_round.png
+          cp $ICON_SOURCE $RES_DIR/mipmap-xxhdpi/ic_launcher_round.png
+          cp $ICON_SOURCE $RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png
 
-if [ ! -f "$ICON_SOURCE" ]; then
-    echo "❌ HATA: Döndü Teyze ikon dosyası bulunamadı:"
-    echo "$ICON_SOURCE"
-    exit 1
-fi
+      - name: Android Manifest İkon Ayarını Güncelle
+        run: |
+          python3 - "android/app/src/main/AndroidManifest.xml" <<'PY'
+          import sys
+          import re
 
-echo "✅ Döndü Teyze ikonu bulundu."
+          manifest = sys.argv[1]
+          with open(manifest, "r", encoding="utf-8") as f:
+              text = f.read()
 
-# --------------------------------------------------
-# 3. Android mipmap klasörlerini oluştur
-# --------------------------------------------------
+          text = re.sub(r'android:icon="@mipmap/[^"]+"', 'android:icon="@mipmap/ic_launcher"', text)
+          text = re.sub(r'android:roundIcon="@mipmap/[^"]+"', 'android:roundIcon="@mipmap/ic_launcher_round"', text)
 
-RES_DIR="$ROOT_DIR/android/app/src/main/res"
+          with open(manifest, "w", encoding="utf-8") as f:
+              f.write(text)
+          PY
 
-mkdir -p "$RES_DIR/mipmap-mdpi"
-mkdir -p "$RES_DIR/mipmap-hdpi"
-mkdir -p "$RES_DIR/mipmap-xhdpi"
-mkdir -p "$RES_DIR/mipmap-xxhdpi"
-mkdir -p "$RES_DIR/mipmap-xxxhdpi"
+      - name: Gradle ile APK Derle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-# --------------------------------------------------
-# 4. Capacitor'un eski launcher ikonlarını temizle
-# --------------------------------------------------
-
-echo "🧹 Eski launcher ikonları temizleniyor..."
-
-find "$RES_DIR" -type f \( \
-    -name "ic_launcher.png" -o \
-    -name "ic_launcher_round.png" -o \
-    -name "ic_launcher_foreground.png" -o \
-    -name "ic_launcher_background.png" \
-\) -delete
-
-# --------------------------------------------------
-# 5. İkonu Android standart isimleriyle kopyala
-# --------------------------------------------------
-
-echo "🖼️ Döndü Teyze ikonu Android'e aktarılıyor..."
-
-# Normal kare ikonlar
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-mdpi/ic_launcher.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-hdpi/ic_launcher.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xhdpi/ic_launcher.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxhdpi/ic_launcher.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxxhdpi/ic_launcher.png"
-
-# Yuvarlak ikonlar
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-mdpi/ic_launcher_round.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-hdpi/ic_launcher_round.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xhdpi/ic_launcher_round.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png"
-cp "$ICON_SOURCE" "$RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png"
-
-# --------------------------------------------------
-# 6. Android Manifest'i standart ikona bağla
-# --------------------------------------------------
-
-MANIFEST="$ROOT_DIR/android/app/src/main/AndroidManifest.xml"
-
-if [ ! -f "$MANIFEST" ]; then
-    echo "❌ AndroidManifest.xml bulunamadı!"
-    exit 1
-fi
-
-echo "🔧 Android Manifest ikon ayarı yapılıyor..."
-
-python3 - "$MANIFEST" <<'PY'
-import sys
-import re
-
-manifest = sys.argv[1]
-
-with open(manifest, "r", encoding="utf-8") as f:
-    text = f.read()
-
-text = re.sub(
-    r'android:icon="@mipmap/[^"]+"',
-    'android:icon="@mipmap/ic_launcher"',
-    text
-)
-
-text = re.sub(
-    r'android:roundIcon="@mipmap/[^"]+"',
-    'android:roundIcon="@mipmap/ic_launcher_round"',
-    text
-)
-
-with open(manifest, "w", encoding="utf-8") as f:
-    f.write(text)
-PY
-
-echo "🎉 İşlem tamam! İkonlar başarıyla güncellendi."
+      - name: APK Dosyasını Kaydet / Yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: donduteyze-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
